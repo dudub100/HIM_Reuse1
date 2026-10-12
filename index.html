@@ -289,16 +289,33 @@
         });
     }
 
-    function executeMinMax(model, iterations=50, alpha=0.1) {
+        function executeMinMax(model, iterations=50, alpha=0.1) {
         for (let iter = 0; iter < iterations; iter++) {
             
-            // 1. General Reduction Step: Try to minimize power across all links by reducing 1dB
-            model.links.forEach(link => {
-                link.txPower = Math.max(model.pmin, link.txPower - 1.0);
-            });
+            // Calculate current state
             calculateSINR(model);
 
-            // 2. Min-Max Balancing Step
+            // 1. Dynamic Global Power Adjustment
+            // Find the worst delta (min SINR - Target SINR) across the hub
+            let worstDeltaForGlobal = Infinity;
+            model.links.forEach(link => {
+                const delta = link.sinr - link.target;
+                if (delta < worstDeltaForGlobal) { worstDeltaForGlobal = delta; }
+            });
+
+            // Adjust all links based on the worst link's distance from target
+            // If worst is above target (positive delta), this reduces global power.
+            // If worst is below target (negative delta), this increases global power.
+            model.links.forEach(link => {
+                link.txPower -= (worstDeltaForGlobal * alpha);
+                // Ensure we don't violate hardware boundaries
+                link.txPower = Math.max(model.pmin, Math.min(model.pmax, link.txPower));
+            });
+
+            // Recalculate SINR after the global shift
+            calculateSINR(model);
+
+            // 2. Min-Max Balancing Step (Relative difference)
             let bestDelta = -Infinity, worstDelta = Infinity, bestIdx = -1, worstIdx = -1;
 
             model.links.forEach((link, idx) => {
@@ -310,12 +327,12 @@
             if (bestIdx !== -1 && worstIdx !== -1 && bestIdx !== worstIdx) {
                 const diff = Math.abs(bestDelta - worstDelta);
                 model.links[bestIdx].txPower = Math.max(model.pmin, model.links[bestIdx].txPower - (diff * alpha));
-                // Provide a slight over-correction to the worst link to counteract the global 1dB drop
-                model.links[worstIdx].txPower = Math.min(model.pmax, model.links[worstIdx].txPower + (diff * alpha) + (worstDelta < 0 ? 1.5 : 0));
+                model.links[worstIdx].txPower = Math.min(model.pmax, model.links[worstIdx].txPower + (diff * alpha));
             }
         }
         calculateSINR(model); 
     }
+
 
     function runBaselineSimulation() {
         if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations.");
