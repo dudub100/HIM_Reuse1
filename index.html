@@ -18,8 +18,9 @@
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f8f9fa; }
-        .chart-container { display: grid; grid-template-columns: 1fr; gap: 25px; margin-top: 20px; } /* Fixed overlap by stacking vertically */
+        .chart-container { display: grid; grid-template-columns: 1fr; gap: 25px; margin-top: 20px; } 
         canvas { background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; max-height: 250px; }
+        #rpeCanvas { max-height: 350px; }
         .instructions { font-size: 13px; color: #666; margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; }
         .map-label { background: rgba(255, 255, 255, 0.8); border: 1px solid #999; border-radius: 3px; padding: 2px 4px; font-size: 11px; font-weight: bold; color: #333; }
     </style>
@@ -31,12 +32,12 @@
         <h2>HIM Parameters</h2>
         <div class="instructions">
             1. Click on the map to place the <b>Hub</b>.<br>
-            2. Click again to place <b>Tail</b> locations (N links).<br>
+            2. Click again to place <b>Tail</b> locations.<br>
             3. Adjust parameters and run simulations.
         </div>
         
         <label>Frequency Band (GHz)</label>
-        <input type="number" id="freq" value="18" step="0.1">
+        <input type="number" id="freq" value="18" step="0.1" onchange="renderRPE()">
 
         <label>Channel BW (MHz)</label>
         <input type="number" id="bw" value="28" step="1">
@@ -48,13 +49,13 @@
         <input type="number" id="pmax" value="25" step="1">
 
         <label>Hub Dish Size (meters)</label>
-        <input type="number" id="hubDish" value="0.6" step="0.1">
+        <input type="number" id="hubDish" value="0.6" step="0.1" onchange="renderRPE()">
 
         <label>Tail Dish Size (meters)</label>
         <input type="number" id="tailDish" value="0.6" step="0.1">
 
         <label>ETSI Antenna Class</label>
-        <select id="antClass">
+        <select id="antClass" onchange="renderRPE()">
             <option value="2">Class 2</option>
             <option value="3" selected>Class 3</option>
             <option value="4">Class 4</option>
@@ -88,6 +89,12 @@
     <div class="panel">
         <div id="map"></div>
         
+        <!-- RPE Plot Area -->
+        <div id="rpeArea" style="margin-bottom: 30px;">
+            <h3>Hub Antenna Radiation Pattern (ETSI Masked Bessel)</h3>
+            <canvas id="rpeCanvas"></canvas>
+        </div>
+
         <div id="resultsArea" style="display: none;">
             <h3>Convergence Results</h3>
             <p id="targetSnrLabel" style="font-weight: bold; color: #0056b3;"></p>
@@ -129,6 +136,7 @@
     let tailMarkers = [];
     let polylines = [];
     let firstLinkAzimuth = null;
+    let rpeChartInstance = null;
 
     const SPEED_OF_LIGHT = 299792458; 
 
@@ -231,6 +239,61 @@
         return Math.min(besselPattern, envelopeLimit); 
     }
 
+    // New Function to render the RPE Graph
+    function renderRPE() {
+        const freq = parseFloat(document.getElementById('freq').value);
+        const hubDish = parseFloat(document.getElementById('hubDish').value);
+        const antClass = parseInt(document.getElementById('antClass').value);
+
+        let angles = [];
+        let gains = [];
+        for (let theta = -180; theta <= 180; theta += 1) {
+            angles.push(theta);
+            gains.push(calcAntennaGain(hubDish, freq, theta, antClass));
+        }
+
+        const ctx = document.getElementById('rpeCanvas').getContext('2d');
+        if (rpeChartInstance) {
+            rpeChartInstance.destroy();
+        }
+
+        rpeChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: angles,
+                datasets: [{
+                    label: `Radiation Pattern (Class ${antClass}, ${hubDish}m, ${freq}GHz)`,
+                    data: gains,
+                    borderColor: '#dc3545',
+                    borderWidth: 1.5,
+                    pointRadius: 0, 
+                    fill: false,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Angle off-boresight (Degrees)' },
+                        ticks: { maxTicksLimit: 20 }
+                    },
+                    y: {
+                        title: { display: true, text: 'Gain (dBi)' }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) { return context.parsed.y.toFixed(2) + ' dBi'; }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     function calcTargetSnr(bitsPerSymbol) {
         const spectralEff = bitsPerSymbol * 0.88;
         const shannonSnrDb = linToDb(Math.pow(2, spectralEff) - 1);
@@ -289,33 +352,27 @@
         });
     }
 
-        function executeMinMax(model, iterations=50, alpha=0.1) {
+    function executeMinMax(model, iterations=50, alpha=0.1) {
         for (let iter = 0; iter < iterations; iter++) {
             
-            // Calculate current state
             calculateSINR(model);
 
             // 1. Dynamic Global Power Adjustment
-            // Find the worst delta (min SINR - Target SINR) across the hub
             let worstDeltaForGlobal = Infinity;
             model.links.forEach(link => {
                 const delta = link.sinr - link.target;
                 if (delta < worstDeltaForGlobal) { worstDeltaForGlobal = delta; }
             });
 
-            // Adjust all links based on the worst link's distance from target
-            // If worst is above target (positive delta), this reduces global power.
-            // If worst is below target (negative delta), this increases global power.
+            // Adjust all links based on worst link's distance from target
             model.links.forEach(link => {
                 link.txPower -= (worstDeltaForGlobal * alpha);
-                // Ensure we don't violate hardware boundaries
                 link.txPower = Math.max(model.pmin, Math.min(model.pmax, link.txPower));
             });
 
-            // Recalculate SINR after the global shift
             calculateSINR(model);
 
-            // 2. Min-Max Balancing Step (Relative difference)
+            // 2. Min-Max Balancing Step
             let bestDelta = -Infinity, worstDelta = Infinity, bestIdx = -1, worstIdx = -1;
 
             model.links.forEach((link, idx) => {
@@ -332,7 +389,6 @@
         }
         calculateSINR(model); 
     }
-
 
     function runBaselineSimulation() {
         if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations.");
@@ -432,6 +488,9 @@
             }));
         });
     }
+
+    // Render initial RPE chart on load
+    window.onload = renderRPE;
 </script>
 
 </body>
