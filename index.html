@@ -3,26 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hub Interference Management (HIM) Simulator</title>
+    <title>Hub Interference Management (HIM) Simulator - ETSI EN 302 217-4</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
-        .container { display: grid; grid-template-columns: 350px 1fr; gap: 20px; max-width: 1600px; margin: 0 auto; }
+        .container { display: grid; grid-template-columns: 360px 1fr; gap: 20px; max-width: 1650px; margin: 0 auto; }
         .panel { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1, h2, h3 { margin-top: 0; }
         label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; }
-        input, select { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input, select { width: 100%; padding: 8px; margin-bottom: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { background-color: #0056b3; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; }
         button:hover { background-color: #004494; }
-        #map { height: 500px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        #map { height: 480px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13.5px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f8f9fa; }
         .chart-container { display: grid; grid-template-columns: 1fr; gap: 25px; margin-top: 20px; } 
         canvas { background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; max-height: 250px; }
-        #rpeCanvas { max-height: 350px; }
-        .instructions { font-size: 13px; color: #666; margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; }
-        .map-label { background: rgba(255, 255, 255, 0.8); border: 1px solid #999; border-radius: 3px; padding: 2px 4px; font-size: 11px; font-weight: bold; color: #333; }
+        #rpeCanvas { max-height: 360px; }
+        .instructions { font-size: 13px; color: #555; margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; line-height: 1.4; }
+        .map-label { background: rgba(255, 255, 255, 0.85); border: 1px solid #888; border-radius: 3px; padding: 2px 5px; font-size: 11px; font-weight: bold; color: #222; }
+        .band-badge { display: inline-block; background: #e2e8f0; color: #1e293b; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 4px; margin-bottom: 12px; width: 100%; box-sizing: border-box; text-align: center; }
     </style>
 </head>
 <body>
@@ -32,12 +33,16 @@
         <h2>HIM Parameters</h2>
         <div class="instructions">
             1. Click on the map to place the <b>Hub</b>.<br>
-            2. Click again to place <b>Tail</b> locations.<br>
-            3. Adjust parameters and run simulations.
+            2. Click again to place <b>Tail</b> locations (N links).<br>
+            3. Adjust RF parameters and run simulations.
         </div>
         
-        <label>Frequency Band (GHz)</label>
-        <input type="number" id="freq" value="18" step="0.1" onchange="renderRPE()">
+        <label>Frequency (GHz) [3 to 86 GHz]</label>
+        <input type="number" id="freq" value="18" min="3" max="86" step="0.5" onchange="onFreqChange()">
+        <div id="activeBandLabel" class="band-badge">ETSI Band: 14–20 GHz</div>
+
+        <label>ETSI EN 302 217-4 Antenna Class</label>
+        <select id="antClass" onchange="renderRPE()"></select>
 
         <label>Channel BW (MHz)</label>
         <input type="number" id="bw" value="28" step="1">
@@ -54,14 +59,7 @@
         <label>Tail Dish Size (meters)</label>
         <input type="number" id="tailDish" value="0.6" step="0.1">
 
-        <label>ETSI Antenna Class</label>
-        <select id="antClass" onchange="renderRPE()">
-            <option value="2">Class 2</option>
-            <option value="3" selected>Class 3</option>
-            <option value="4">Class 4</option>
-        </select>
-
-        <label>Target Modulation</label>
+        <label>Target Modulation (ACM)</label>
         <select id="mod">
             <option value="4">16-QAM</option>
             <option value="6">64-QAM</option>
@@ -73,10 +71,10 @@
         <label>Noise Figure (dB)</label>
         <input type="number" id="nf" value="5" step="0.1">
         
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 18px 0;">
 
         <label>Monte Carlo Iterations</label>
-        <input type="number" id="mcIters" value="100" step="1">
+        <input type="number" id="mcIters" value="100" step="10">
 
         <label>Max Fade Depth (dB)</label>
         <input type="number" id="mcFade" value="20" step="1">
@@ -91,7 +89,7 @@
         
         <!-- RPE Plot Area -->
         <div id="rpeArea" style="margin-bottom: 30px;">
-            <h3>Hub Antenna Radiation Pattern (ETSI Masked Bessel)</h3>
+            <h3>Hub Antenna Co-Polar RPE (ETSI EN 302 217-4 V2.2.1)</h3>
             <canvas id="rpeCanvas"></canvas>
         </div>
 
@@ -103,7 +101,7 @@
                     <tr>
                         <th>Link ID</th>
                         <th>Distance (km)</th>
-                        <th>Rel. Angle (°)</th>
+                        <th>Rel. Angle vs Link 1 (°)</th>
                         <th>Initial Tx (dBm)</th>
                         <th>Initial SINR (dB)</th>
                         <th>Converged Tx (dBm)</th>
@@ -127,6 +125,125 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
+    // --- 1. Exact ETSI EN 302 217-4 V2.2.1 Co-Polar RPE Database ---
+    const ETSI_RPE_DB = {
+        "3-14": {
+            label: "3–14 GHz (Clause 4.4.3)",
+            classes: {
+                "Class 2": [[5, 26], [10, 20], [20, 12], [50, 5], [65, 2], [80, 2], [105, -20], [180, -20]],
+                "Class 3": [[5, 20], [20, 8], [70, -5], [100, -25], [180, -25]],
+                "Class 4": [[5, 16], [10, 5], [20, -7], [50, -18], [70, -20], [85, -24], [105, -30], [180, -30]]
+            }
+        },
+        "14-20": {
+            label: "14–20 GHz (Clause 4.4.4)",
+            classes: {
+                "Class 2": [[5, 25], [15, 13], [20, 10], [70, 0], [80, -8], [100, -18], [160, -20], [180, -20]],
+                "Class 3": [[5, 18], [10, 9], [25, 2], [60, -4], [95, -27], [180, -27]],
+                "Class 4": [[5, 18], [10, 9], [20, -4], [40, -13], [80, -25], [100, -30], [180, -30]]
+            }
+        },
+        "24-30": {
+            label: "24–30 GHz (Clause 4.4.6)",
+            classes: {
+                "Class 2": [[5, 23], [12, 13], [30, 4], [70, -1], [100, -18], [180, -18]],
+                "Class 3": [[5, 20], [20, 5], [55, 0], [100, -23], [180, -25]],
+                "Class 4": [[5, 18], [10, 9], [20, -4], [40, -13], [80, -25], [100, -30], [180, -30]]
+            }
+        },
+        "30-47": {
+            label: "30–47 GHz (Clause 4.4.7)",
+            classes: {
+                "Class 2": [[5, 25], [10, 17], [15, 13], [25, 8], [30, 4], [70, -4], [90, -17], [180, -17]],
+                "Class 3A/3B (V-Pol)": [[5, 16], [10, 9], [15, 5], [20, 0], [40, -7], [50, -8], [65, -10], [75, -10], [90, -17], [180, -17]],
+                "Class 3B/3C (H-Pol)": [[5, 20], [10, 11], [15, 6], [20, 0], [50, -1], [70, -4], [90, -17], [180, -17]],
+                "Class 3C (V-Pol)": [[5, 12], [9, 9], [10, 6], [15, 2], [20, 0], [30, -4], [40, -7], [45, -9], [60, -14], [70, -18], [180, -18]],
+                "Class 4": [[5, 12], [10, 5], [20, -4], [40, -13], [90, -24], [180, -24]]
+            }
+        },
+        "47-71": {
+            label: "47–71 GHz (Clause 4.4.8)",
+            classes: {
+                "Class 2": [[5, 25], [10, 17], [15, 14], [40, 2], [70, -2], [90, -18], [180, -18]],
+                "Class 3A/3B (V-Pol)": [[5, 16], [10, 9], [15, 5], [20, 0], [40, -7], [50, -8], [65, -10], [75, -10], [90, -17], [180, -17]],
+                "Class 3B (H-Pol)": [[5, 16], [10, 6], [20, 1], [75, -10], [90, -17], [180, -17]]
+            }
+        },
+        "71-86": {
+            label: "71–86 GHz (Clause 4.4.9)",
+            classes: {
+                "Class 2": [[5, 25], [15, 10], [20, 7], [40, 2], [70, -2], [88.75, -7], [100, -7], [100.001, -10], [180, -10]],
+                "Class 3": [[5, 16], [10, 9], [20, 1], [50, -1], [70, -4], [90, -17], [180, -17]],
+                "Class 4": [[5, 12], [10, 5], [20, -4], [90, -21], [180, -21]]
+            }
+        }
+    };
+
+    function getBandKey(freqGHz) {
+        if (freqGHz <= 14) return "3-14";
+        if (freqGHz <= 22) return "14-20"; // Covers 14-20 GHz (and bridges 20-24 gap to nearest lower band)
+        if (freqGHz <= 30) return "24-30";
+        if (freqGHz <= 47) return "30-47";
+        if (freqGHz <= 71) return "47-71";
+        return "71-86";
+    }
+
+    function onFreqChange() {
+        const freq = parseFloat(document.getElementById('freq').value);
+        const bandKey = getBandKey(freq);
+        const bandObj = ETSI_RPE_DB[bandKey];
+        
+        document.getElementById('activeBandLabel').innerText = `ETSI Band: ${bandObj.label}`;
+        
+        const select = document.getElementById('antClass');
+        const prevSelection = select.value;
+        select.innerHTML = "";
+        
+        const availableClasses = Object.keys(bandObj.classes);
+        availableClasses.forEach(clsName => {
+            const opt = document.createElement('option');
+            opt.value = clsName;
+            opt.innerText = clsName;
+            select.appendChild(opt);
+        });
+
+        // Retain equivalent class selection if possible
+        if (availableClasses.includes(prevSelection)) {
+            select.value = prevSelection;
+        } else if (availableClasses.some(c => c.startsWith("Class 3"))) {
+            select.value = availableClasses.find(c => c.startsWith("Class 3"));
+        } else {
+            select.value = availableClasses[0];
+        }
+
+        renderRPE();
+    }
+
+    // Piecewise linear interpolation for ETSI Envelope (5° to 180°)
+    function getEtsiMaskGain(freqGHz, etsiClassKey, thetaDeg) {
+        let theta = Math.abs(thetaDeg);
+        if (theta > 180) theta = 360 - theta;
+        
+        const bandKey = getBandKey(freqGHz);
+        const bandClasses = ETSI_RPE_DB[bandKey].classes;
+        const pts = bandClasses[etsiClassKey] || Object.values(bandClasses)[0];
+
+        if (theta <= pts[0][0]) return pts[0][1];
+        if (theta >= 180) return pts[pts.length - 1][1];
+
+        for (let i = 0; i < pts.length - 1; i++) {
+            const [a1, g1] = pts[i];
+            const [a2, g2] = pts[i + 1];
+            if (theta >= a1 && theta <= a2) {
+                if (Math.abs(a2 - a1) < 1e-4) return g2; // Step discontinuity
+                const t = (theta - a1) / (a2 - a1);
+                return g1 + t * (g2 - g1);
+            }
+        }
+        return pts[pts.length - 1][1];
+    }
+
+    // --- 2. Map & UI Setup ---
     let map = L.map('map').setView([32.1750, 34.9069], 12); 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
@@ -159,7 +276,7 @@
             if (relAngle > 180) relAngle = 360 - relAngle;
 
             let line = L.polyline([hubMarker.getLatLng(), tail.getLatLng()], {color: 'gray', weight: 2, dashArray: '5, 5'}).addTo(map);
-            line.bindTooltip(`${distKm.toFixed(2)} km | Rel: ${relAngle.toFixed(1)}°`, {permanent: true, direction: 'center', className: 'map-label'});
+            line.bindTooltip(`L${tailMarkers.length}: ${distKm.toFixed(2)} km | Rel: ${relAngle.toFixed(1)}°`, {permanent: true, direction: 'center', className: 'map-label'});
             
             polylines.push(line);
         }
@@ -177,6 +294,7 @@
         document.getElementById('mcArea').style.display = 'none';
     }
 
+    // --- 3. RF Math & Physics ---
     function toRad(deg) { return deg * Math.PI / 180; }
     function toDeg(rad) { return rad * 180 / Math.PI; }
     function linToDb(lin) { return 10 * Math.log10(lin); }
@@ -213,43 +331,48 @@
         }
     }
 
-    function calcAntennaGain(diameter, freqGHz, thetaDeg, etsiClass) {
+    // Composite Gain: Bessel Main Beam (0° to 5°) + ETSI EN 302 217-4 RPE Envelope (5° to 180°)
+    function calcAntennaGain(diameter, freqGHz, thetaDeg, etsiClassKey) {
         const lambda = SPEED_OF_LIGHT / (freqGHz * 1e9);
         const maxGain = 10 * Math.log10(0.6 * Math.pow((Math.PI * diameter) / lambda, 2));
+        
         let theta = Math.abs(thetaDeg);
         if (theta > 180) theta = 360 - theta;
         if (theta === 0) return maxGain;
 
-        const u = (Math.PI * diameter / lambda) * Math.sin(toRad(theta));
-        let besselPattern = maxGain;
-        if (u !== 0) {
-            const bVal = Math.abs(2 * besselJ1(u) / u);
-            besselPattern = bVal > 1e-6 ? maxGain + 20 * Math.log10(bVal) : -100;
+        const etsiMaskAtTheta = getEtsiMaskGain(freqGHz, etsiClassKey, theta);
+
+        // From 5° to 180°, use the exact ETSI RPE envelope
+        if (theta >= 5.0) {
+            return etsiMaskAtTheta;
         }
 
-        let etsiFloor = -30, etsiDecayRate = 0.5;
-        if (etsiClass == 2) { etsiFloor = maxGain - 25; etsiDecayRate = 0.3; }
-        else if (etsiClass == 3) { etsiFloor = maxGain - 30; etsiDecayRate = 0.5; }
-        else if (etsiClass == 4) { etsiFloor = maxGain - 35; etsiDecayRate = 0.7; }
+        // For 0° < theta < 5° (Main lobe & near-in transition):
+        // Calculate Bessel pattern, and ensure smooth transition to the 5° ETSI point without deep nulls
+        const u = (Math.PI * diameter / lambda) * Math.sin(toRad(theta));
+        let besselGain = maxGain;
+        if (u !== 0) {
+            const bVal = Math.abs(2 * besselJ1(u) / u);
+            besselGain = bVal > 1e-6 ? maxGain + 20 * Math.log10(bVal) : -100;
+        }
 
-        let envelopeLimit = etsiFloor - (theta * etsiDecayRate);
-        const backlobeFloor = maxGain - (etsiClass == 4 ? 65 : (etsiClass == 3 ? 55 : 45)); 
-        envelopeLimit = Math.max(envelopeLimit, backlobeFloor);
-
-        return Math.min(besselPattern, envelopeLimit); 
+        const etsiAt5 = getEtsiMaskGain(freqGHz, etsiClassKey, 5.0);
+        return Math.min(maxGain, Math.max(besselGain, etsiAt5));
     }
 
-    // New Function to render the RPE Graph
     function renderRPE() {
         const freq = parseFloat(document.getElementById('freq').value);
         const hubDish = parseFloat(document.getElementById('hubDish').value);
-        const antClass = parseInt(document.getElementById('antClass').value);
+        const antClassKey = document.getElementById('antClass').value;
 
         let angles = [];
-        let gains = [];
+        let compositeGains = [];
+        let pureEtsiMask = [];
+
         for (let theta = -180; theta <= 180; theta += 1) {
             angles.push(theta);
-            gains.push(calcAntennaGain(hubDish, freq, theta, antClass));
+            compositeGains.push(calcAntennaGain(hubDish, freq, theta, antClassKey));
+            pureEtsiMask.push(Math.abs(theta) >= 5 ? getEtsiMaskGain(freq, antClassKey, theta) : null);
         }
 
         const ctx = document.getElementById('rpeCanvas').getContext('2d');
@@ -261,32 +384,44 @@
             type: 'line',
             data: {
                 labels: angles,
-                datasets: [{
-                    label: `Radiation Pattern (Class ${antClass}, ${hubDish}m, ${freq}GHz)`,
-                    data: gains,
-                    borderColor: '#dc3545',
-                    borderWidth: 1.5,
-                    pointRadius: 0, 
-                    fill: false,
-                    tension: 0.1
-                }]
+                datasets: [
+                    {
+                        label: `Composite Pattern (Bessel Main Lobe + ${antClassKey} RPE, ${hubDish}m, ${freq} GHz)`,
+                        data: compositeGains,
+                        borderColor: '#dc3545',
+                        borderWidth: 2,
+                        pointRadius: 0, 
+                        fill: false,
+                        tension: 0.05
+                    },
+                    {
+                        label: `ETSI EN 302 217-4 Mask Limit (5° to 180°)`,
+                        data: pureEtsiMask,
+                        borderColor: '#0056b3',
+                        borderDash: [5, 5],
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
                     x: {
-                        title: { display: true, text: 'Angle off-boresight (Degrees)' },
-                        ticks: { maxTicksLimit: 20 }
+                        title: { display: true, text: 'Azimuth Angle off-boresight (Degrees)' },
+                        ticks: { maxTicksLimit: 19 }
                     },
                     y: {
-                        title: { display: true, text: 'Gain (dBi)' }
+                        title: { display: true, text: 'Co-Polar Gain (dBi)' }
                     }
                 },
                 plugins: {
                     tooltip: {
                         callbacks: {
-                            label: function(context) { return context.parsed.y.toFixed(2) + ' dBi'; }
+                            label: function(context) { return context.dataset.label.split('(')[0] + ': ' + context.parsed.y.toFixed(2) + ' dBi'; }
                         }
                     }
                 }
@@ -305,7 +440,7 @@
         const bw = parseFloat(document.getElementById('bw').value);
         const hubDish = parseFloat(document.getElementById('hubDish').value);
         const tailDish = parseFloat(document.getElementById('tailDish').value);
-        const antClass = parseInt(document.getElementById('antClass').value);
+        const antClass = document.getElementById('antClass').value;
         const pmax = parseFloat(document.getElementById('pmax').value);
         const targetSnr = calcTargetSnr(parseInt(document.getElementById('mod').value));
 
@@ -344,7 +479,8 @@
             let intLin = 0;
             model.links.forEach((aggressor) => {
                 if (victim.id !== aggressor.id) {
-                    const angleDiff = Math.abs(aggressor.azimuth - victim.azimuth);
+                    let angleDiff = Math.abs(aggressor.azimuth - victim.azimuth);
+                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
                     intLin += dbToLin(aggressor.txPower - victim.fsl + calcAntennaGain(model.hubDish, model.freq, angleDiff, model.antClass) + tailMaxGain);
                 }
             });
@@ -352,19 +488,18 @@
         });
     }
 
-    function executeMinMax(model, iterations=50, alpha=0.1) {
+    function executeMinMax(model, iterations=100, alpha=0.2) {
         for (let iter = 0; iter < iterations; iter++) {
             
             calculateSINR(model);
 
-            // 1. Dynamic Global Power Adjustment
+            // 1. Dynamic Global Power Adjustment based on worst link distance from target
             let worstDeltaForGlobal = Infinity;
             model.links.forEach(link => {
                 const delta = link.sinr - link.target;
                 if (delta < worstDeltaForGlobal) { worstDeltaForGlobal = delta; }
             });
 
-            // Adjust all links based on worst link's distance from target
             model.links.forEach(link => {
                 link.txPower -= (worstDeltaForGlobal * alpha);
                 link.txPower = Math.max(model.pmin, Math.min(model.pmax, link.txPower));
@@ -391,7 +526,7 @@
     }
 
     function runBaselineSimulation() {
-        if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations.");
+        if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations on the map.");
 
         const model = buildNetworkModel();
         calculateSINR(model);
@@ -407,24 +542,24 @@
             tr.innerHTML = `
                 <td>Link ${idx + 1}</td>
                 <td>${link.dist.toFixed(2)}</td>
-                <td>${link.relAngle.toFixed(1)}</td>
+                <td>${link.relAngle.toFixed(1)}°</td>
                 <td>${initialStates[idx].tx.toFixed(1)}</td>
                 <td>${initialStates[idx].sinr.toFixed(1)}</td>
                 <td><b>${link.txPower.toFixed(1)}</b></td>
                 <td><b>${link.sinr.toFixed(1)}</b></td>
-                <td style="color: ${(link.sinr - link.target) < 0 ? 'red' : 'green'}">${(link.sinr - link.target).toFixed(2)}</td>
+                <td style="color: ${(link.sinr - link.target) < -0.05 ? 'red' : 'green'}; font-weight: bold;">${(link.sinr - link.target).toFixed(2)}</td>
             `;
             tbody.appendChild(tr);
         });
 
-        document.getElementById('targetSnrLabel').innerText = `Target SINR calculated for chosen modulation: ${model.links[0].target.toFixed(2)} dB`;
+        document.getElementById('targetSnrLabel').innerText = `Target SINR for selected modulation: ${model.links[0].target.toFixed(2)} dB | Antenna Class: ${model.antClass}`;
         document.getElementById('resultsArea').style.display = 'block';
     }
 
     let charts = [];
 
     function runMonteCarlo() {
-        if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations.");
+        if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations on the map.");
 
         const iters = parseInt(document.getElementById('mcIters').value);
         const maxFade = parseFloat(document.getElementById('mcFade').value);
@@ -484,13 +619,21 @@
                         borderWidth: 1
                     }]
                 },
-                options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true }, x: { title: { display: true, text: 'SINR (dB)' } } } }
+                options: { 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        y: { beginAtZero: true, title: { display: true, text: 'Occurrences' } }, 
+                        x: { title: { display: true, text: 'Converged SINR (dB)' } } 
+                    } 
+                }
             }));
         });
     }
 
-    // Render initial RPE chart on load
-    window.onload = renderRPE;
+    // Initialize UI and RPE plot on load
+    window.onload = function() {
+        onFreqChange();
+    };
 </script>
 
 </body>
