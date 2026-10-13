@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hub Interference Management (HIM) Simulator - ETSI EN 302 217-4</title>
+    <title>Bi-Directional HIM Simulator - ETSI EN 302 217-4</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
-        .container { display: grid; grid-template-columns: 360px 1fr; gap: 20px; max-width: 1650px; margin: 0 auto; }
+        .container { display: grid; grid-template-columns: 360px 1fr; gap: 20px; max-width: 1700px; margin: 0 auto; }
         .panel { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1, h2, h3 { margin-top: 0; }
+        h1, h2, h3, h4 { margin-top: 0; }
         label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; }
         input, select { width: 100%; padding: 8px; margin-bottom: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { background-color: #0056b3; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; }
         button:hover { background-color: #004494; }
-        #map { height: 480px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13.5px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        #map { height: 460px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 25px; font-size: 13px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
         th { background-color: #f8f9fa; }
+        .dl-header { background-color: #e3f2fd !important; color: #0d47a1; }
+        .ul-header { background-color: #e8f5e9 !important; color: #1b5e20; }
         .chart-container { display: grid; grid-template-columns: 1fr; gap: 25px; margin-top: 20px; } 
-        canvas { background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; max-height: 250px; }
-        #rpeCanvas { max-height: 360px; }
+        canvas { background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; max-height: 260px; }
+        #rpeCanvas { max-height: 340px; }
         .instructions { font-size: 13px; color: #555; margin-bottom: 15px; background: #e9ecef; padding: 10px; border-radius: 4px; line-height: 1.4; }
-        .map-label { background: rgba(255, 255, 255, 0.85); border: 1px solid #888; border-radius: 3px; padding: 2px 5px; font-size: 11px; font-weight: bold; color: #222; }
+        .map-label { background: rgba(255, 255, 255, 0.88); border: 1px solid #888; border-radius: 3px; padding: 2px 5px; font-size: 11px; font-weight: bold; color: #222; }
         .band-badge { display: inline-block; background: #e2e8f0; color: #1e293b; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 4px; margin-bottom: 12px; width: 100%; box-sizing: border-box; text-align: center; }
     </style>
 </head>
@@ -34,7 +36,7 @@
         <div class="instructions">
             1. Click on the map to place the <b>Hub</b>.<br>
             2. Click again to place <b>Tail</b> locations (N links).<br>
-            3. Adjust RF parameters and run simulations.
+            3. Run simulations to evaluate both <b>Downlink (Hub &rarr; Tail)</b> and <b>Uplink (Tail &rarr; Hub)</b>.
         </div>
         
         <label>Frequency (GHz) [3 to 86 GHz]</label>
@@ -57,7 +59,7 @@
         <input type="number" id="hubDish" value="0.6" step="0.1" onchange="renderRPE()">
 
         <label>Tail Dish Size (meters)</label>
-        <input type="number" id="tailDish" value="0.6" step="0.1">
+        <input type="number" id="tailDish" value="0.6" step="0.1" onchange="renderRPE()">
 
         <label>Target Modulation (ACM)</label>
         <select id="mod">
@@ -79,8 +81,8 @@
         <label>Max Fade Depth (dB)</label>
         <input type="number" id="mcFade" value="20" step="1">
 
-        <button onclick="runBaselineSimulation()">Run Min-Max Algorithm</button>
-        <button onclick="runMonteCarlo()" style="background-color: #28a745;">Run Monte Carlo Simulation</button>
+        <button onclick="runBaselineSimulation()">Run Bi-Directional Min-Max</button>
+        <button onclick="runMonteCarlo()" style="background-color: #28a745;">Run Monte Carlo (DL & UL)</button>
         <button onclick="resetMap()" style="background-color: #dc3545;">Reset Map / Clear Links</button>
     </div>
 
@@ -89,24 +91,45 @@
         
         <!-- RPE Plot Area -->
         <div id="rpeArea" style="margin-bottom: 30px;">
-            <h3>Hub Antenna Co-Polar RPE (ETSI EN 302 217-4 V2.2.1)</h3>
+            <h3>Antenna Co-Polar RPE (ETSI EN 302 217-4 V2.2.1)</h3>
             <canvas id="rpeCanvas"></canvas>
         </div>
 
         <div id="resultsArea" style="display: none;">
-            <h3>Convergence Results</h3>
+            <h3>Bi-Directional Convergence Results</h3>
             <p id="targetSnrLabel" style="font-weight: bold; color: #0056b3;"></p>
-            <table id="resultsTable">
+            
+            <h4>1. Downlink: Hub &rarr; Tail (Hub Tx Power Control)</h4>
+            <p style="font-size: 12.5px; color: #555; margin-top: -5px;">Desired signal and Hub side-lobe interferers travel the same path distance ($FSL_{victim}$) to each Tail receiver.</p>
+            <table id="dlResultsTable">
                 <thead>
                     <tr>
-                        <th>Link ID</th>
-                        <th>Distance (km)</th>
-                        <th>Rel. Angle vs Link 1 (°)</th>
-                        <th>Initial Tx (dBm)</th>
-                        <th>Initial SINR (dB)</th>
-                        <th>Converged Tx (dBm)</th>
-                        <th>Converged SINR (dB)</th>
-                        <th>Delta to Target (dB)</th>
+                        <th class="dl-header">Link ID</th>
+                        <th class="dl-header">Distance (km)</th>
+                        <th class="dl-header">Rel. Angle vs L1 (°)</th>
+                        <th class="dl-header">Init Hub Tx (dBm)</th>
+                        <th class="dl-header">Init DL SINR (dB)</th>
+                        <th class="dl-header">Conv. Hub Tx (dBm)</th>
+                        <th class="dl-header">Conv. DL SINR (dB)</th>
+                        <th class="dl-header">DL Delta to Target (dB)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h4>2. Uplink: Tail &rarr; Hub (Tail Tx Power Control — Near-Far Mitigation)</h4>
+            <p style="font-size: 12.5px; color: #555; margin-top: -5px;">Each interfering Tail transmits at full main-beam gain over its own path distance ($FSL_{aggressor}$) into the Hub receiver's off-axis angle.</p>
+            <table id="ulResultsTable">
+                <thead>
+                    <tr>
+                        <th class="ul-header">Link ID</th>
+                        <th class="ul-header">Distance (km)</th>
+                        <th class="ul-header">Rel. Angle vs L1 (°)</th>
+                        <th class="ul-header">Init Tail Tx (dBm)</th>
+                        <th class="ul-header">Init UL SINR (dB)</th>
+                        <th class="ul-header">Conv. Tail Tx (dBm)</th>
+                        <th class="ul-header">Conv. UL SINR (dB)</th>
+                        <th class="ul-header">UL Delta to Target (dB)</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -114,8 +137,8 @@
         </div>
 
         <div id="mcArea" style="display: none; margin-top: 30px;">
-            <h3>Monte Carlo Convergence SINR Histograms</h3>
-            <p>Histograms display the converged SINR distribution per link under random uniform fading.</p>
+            <h3>Monte Carlo Convergence SINR Histograms (Downlink vs. Uplink)</h3>
+            <p>Each iteration applies a random uniform fade (0 to Max Fade dB) to a randomly chosen link (affecting both DL and UL path loss of that link) and runs both Min-Max loops to convergence.</p>
             <div class="chart-container" id="chartsContainer"></div>
         </div>
     </div>
@@ -181,7 +204,7 @@
 
     function getBandKey(freqGHz) {
         if (freqGHz <= 14) return "3-14";
-        if (freqGHz <= 22) return "14-20"; // Covers 14-20 GHz (and bridges 20-24 gap to nearest lower band)
+        if (freqGHz <= 22) return "14-20";
         if (freqGHz <= 30) return "24-30";
         if (freqGHz <= 47) return "30-47";
         if (freqGHz <= 71) return "47-71";
@@ -207,7 +230,6 @@
             select.appendChild(opt);
         });
 
-        // Retain equivalent class selection if possible
         if (availableClasses.includes(prevSelection)) {
             select.value = prevSelection;
         } else if (availableClasses.some(c => c.startsWith("Class 3"))) {
@@ -219,7 +241,6 @@
         renderRPE();
     }
 
-    // Piecewise linear interpolation for ETSI Envelope (5° to 180°)
     function getEtsiMaskGain(freqGHz, etsiClassKey, thetaDeg) {
         let theta = Math.abs(thetaDeg);
         if (theta > 180) theta = 360 - theta;
@@ -235,7 +256,7 @@
             const [a1, g1] = pts[i];
             const [a2, g2] = pts[i + 1];
             if (theta >= a1 && theta <= a2) {
-                if (Math.abs(a2 - a1) < 1e-4) return g2; // Step discontinuity
+                if (Math.abs(a2 - a1) < 1e-4) return g2;
                 const t = (theta - a1) / (a2 - a1);
                 return g1 + t * (g2 - g1);
             }
@@ -331,7 +352,6 @@
         }
     }
 
-    // Composite Gain: Bessel Main Beam (0° to 5°) + ETSI EN 302 217-4 RPE Envelope (5° to 180°)
     function calcAntennaGain(diameter, freqGHz, thetaDeg, etsiClassKey) {
         const lambda = SPEED_OF_LIGHT / (freqGHz * 1e9);
         const maxGain = 10 * Math.log10(0.6 * Math.pow((Math.PI * diameter) / lambda, 2));
@@ -341,14 +361,10 @@
         if (theta === 0) return maxGain;
 
         const etsiMaskAtTheta = getEtsiMaskGain(freqGHz, etsiClassKey, theta);
-
-        // From 5° to 180°, use the exact ETSI RPE envelope
         if (theta >= 5.0) {
             return etsiMaskAtTheta;
         }
 
-        // For 0° < theta < 5° (Main lobe & near-in transition):
-        // Calculate Bessel pattern, and ensure smooth transition to the 5° ETSI point without deep nulls
         const u = (Math.PI * diameter / lambda) * Math.sin(toRad(theta));
         let besselGain = maxGain;
         if (u !== 0) {
@@ -386,7 +402,7 @@
                 labels: angles,
                 datasets: [
                     {
-                        label: `Composite Pattern (Bessel Main Lobe + ${antClassKey} RPE, ${hubDish}m, ${freq} GHz)`,
+                        label: `Composite Hub Pattern (Bessel Main Lobe + ${antClassKey} RPE, ${hubDish}m, ${freq} GHz)`,
                         data: compositeGains,
                         borderColor: '#dc3545',
                         borderWidth: 2,
@@ -416,13 +432,6 @@
                     },
                     y: {
                         title: { display: true, text: 'Co-Polar Gain (dBi)' }
-                    }
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) { return context.dataset.label.split('(')[0] + ': ' + context.parsed.y.toFixed(2) + ' dBi'; }
-                        }
                     }
                 }
             }
@@ -460,9 +469,17 @@
             }
 
             links.push({
-                id: idx, dist: distKm, azimuth: bearing, relAngle: relAngle,
-                fsl: fsl + (idx === fadeLinkIdx ? fadeVal : 0), 
-                txPower: pmax, sinr: 0, target: targetSnr
+                id: idx,
+                dist: distKm,
+                azimuth: bearing,
+                relAngle: relAngle,
+                fsl: fsl + (idx === fadeLinkIdx ? fadeVal : 0),
+                // Separate Tx Powers and SINRs for Downlink (Hub->Tail) and Uplink (Tail->Hub)
+                txPowerDL: pmax,
+                sinrDL: 0,
+                txPowerUL: pmax,
+                sinrUL: 0,
+                target: targetSnr
             });
         });
 
@@ -470,86 +487,167 @@
         return { links, freq, hubDish, tailDish, antClass, thermalNoiseLin, pmax, pmin: parseFloat(document.getElementById('pmin').value) };
     }
 
-    function calculateSINR(model) {
+    // --- 4. Bi-Directional SINR Engines ---
+
+    // Downlink: Hub Transmitters -> Tail Receivers
+    function calculateSINR_DL(model) {
         const hubMaxGain = calcAntennaGain(model.hubDish, model.freq, 0, model.antClass);
         const tailMaxGain = calcAntennaGain(model.tailDish, model.freq, 0, model.antClass);
 
         model.links.forEach((victim) => {
-            const rxPowerLin = dbToLin(victim.txPower - victim.fsl + hubMaxGain + tailMaxGain);
+            const rxPowerLin = dbToLin(victim.txPowerDL - victim.fsl + hubMaxGain + tailMaxGain);
             let intLin = 0;
             model.links.forEach((aggressor) => {
                 if (victim.id !== aggressor.id) {
                     let angleDiff = Math.abs(aggressor.azimuth - victim.azimuth);
                     if (angleDiff > 180) angleDiff = 360 - angleDiff;
-                    intLin += dbToLin(aggressor.txPower - victim.fsl + calcAntennaGain(model.hubDish, model.freq, angleDiff, model.antClass) + tailMaxGain);
+                    // Aggressor Hub sector leaks at angleDiff, travels over victim's path (victim.fsl) into victim Tail's main beam
+                    const leakGainHub = calcAntennaGain(model.hubDish, model.freq, angleDiff, model.antClass);
+                    intLin += dbToLin(aggressor.txPowerDL - victim.fsl + leakGainHub + tailMaxGain);
                 }
             });
-            victim.sinr = linToDb(rxPowerLin / (model.thermalNoiseLin + intLin));
+            victim.sinrDL = linToDb(rxPowerLin / (model.thermalNoiseLin + intLin));
         });
     }
 
-    function executeMinMax(model, iterations=100, alpha=0.2) {
+    // Uplink: Tail Transmitters -> Hub Receivers
+    function calculateSINR_UL(model) {
+        const hubMaxGain = calcAntennaGain(model.hubDish, model.freq, 0, model.antClass);
+        const tailMaxGain = calcAntennaGain(model.tailDish, model.freq, 0, model.antClass);
+
+        model.links.forEach((victim) => {
+            const rxPowerLin = dbToLin(victim.txPowerUL - victim.fsl + tailMaxGain + hubMaxGain);
+            let intLin = 0;
+            model.links.forEach((aggressor) => {
+                if (victim.id !== aggressor.id) {
+                    let angleDiff = Math.abs(aggressor.azimuth - victim.azimuth);
+                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
+                    // Aggressor Tail points directly at Hub (tailMaxGain), travels over aggressor's own path (aggressor.fsl),
+                    // and enters victim Hub sector receiver at off-boresight angleDiff
+                    const rxGainHub = calcAntennaGain(model.hubDish, model.freq, angleDiff, model.antClass);
+                    intLin += dbToLin(aggressor.txPowerUL - aggressor.fsl + tailMaxGain + rxGainHub);
+                }
+            });
+            victim.sinrUL = linToDb(rxPowerLin / (model.thermalNoiseLin + intLin));
+        });
+    }
+
+    // Bi-Directional Min-Max Execution
+    function executeMinMaxBoth(model, iterations=100, alpha=0.2) {
+        // 1. Run Downlink Loop (Hub Tx Power)
         for (let iter = 0; iter < iterations; iter++) {
-            
-            calculateSINR(model);
+            calculateSINR_DL(model);
 
-            // 1. Dynamic Global Power Adjustment based on worst link distance from target
-            let worstDeltaForGlobal = Infinity;
+            let worstDeltaGlobal = Infinity;
             model.links.forEach(link => {
-                const delta = link.sinr - link.target;
-                if (delta < worstDeltaForGlobal) { worstDeltaForGlobal = delta; }
+                const delta = link.sinrDL - link.target;
+                if (delta < worstDeltaGlobal) worstDeltaGlobal = delta;
             });
 
             model.links.forEach(link => {
-                link.txPower -= (worstDeltaForGlobal * alpha);
-                link.txPower = Math.max(model.pmin, Math.min(model.pmax, link.txPower));
+                link.txPowerDL -= (worstDeltaGlobal * alpha);
+                link.txPowerDL = Math.max(model.pmin, Math.min(model.pmax, link.txPowerDL));
             });
 
-            calculateSINR(model);
+            calculateSINR_DL(model);
 
-            // 2. Min-Max Balancing Step
             let bestDelta = -Infinity, worstDelta = Infinity, bestIdx = -1, worstIdx = -1;
-
             model.links.forEach((link, idx) => {
-                const delta = link.sinr - link.target;
+                const delta = link.sinrDL - link.target;
                 if (delta > bestDelta) { bestDelta = delta; bestIdx = idx; }
                 if (delta < worstDelta) { worstDelta = delta; worstIdx = idx; }
             });
 
             if (bestIdx !== -1 && worstIdx !== -1 && bestIdx !== worstIdx) {
                 const diff = Math.abs(bestDelta - worstDelta);
-                model.links[bestIdx].txPower = Math.max(model.pmin, model.links[bestIdx].txPower - (diff * alpha));
-                model.links[worstIdx].txPower = Math.min(model.pmax, model.links[worstIdx].txPower + (diff * alpha));
+                model.links[bestIdx].txPowerDL = Math.max(model.pmin, model.links[bestIdx].txPowerDL - (diff * alpha));
+                model.links[worstIdx].txPowerDL = Math.min(model.pmax, model.links[worstIdx].txPowerDL + (diff * alpha));
             }
         }
-        calculateSINR(model); 
+        calculateSINR_DL(model);
+
+        // 2. Run Uplink Loop (Tail Tx Power)
+        for (let iter = 0; iter < iterations; iter++) {
+            calculateSINR_UL(model);
+
+            let worstDeltaGlobal = Infinity;
+            model.links.forEach(link => {
+                const delta = link.sinrUL - link.target;
+                if (delta < worstDeltaGlobal) worstDeltaGlobal = delta;
+            });
+
+            model.links.forEach(link => {
+                link.txPowerUL -= (worstDeltaGlobal * alpha);
+                link.txPowerUL = Math.max(model.pmin, Math.min(model.pmax, link.txPowerUL));
+            });
+
+            calculateSINR_UL(model);
+
+            let bestDelta = -Infinity, worstDelta = Infinity, bestIdx = -1, worstIdx = -1;
+            model.links.forEach((link, idx) => {
+                const delta = link.sinrUL - link.target;
+                if (delta > bestDelta) { bestDelta = delta; bestIdx = idx; }
+                if (delta < worstDelta) { worstDelta = delta; worstIdx = idx; }
+            });
+
+            if (bestIdx !== -1 && worstIdx !== -1 && bestIdx !== worstIdx) {
+                const diff = Math.abs(bestDelta - worstDelta);
+                model.links[bestIdx].txPowerUL = Math.max(model.pmin, model.links[bestIdx].txPowerUL - (diff * alpha));
+                model.links[worstIdx].txPowerUL = Math.min(model.pmax, model.links[worstIdx].txPowerUL + (diff * alpha));
+            }
+        }
+        calculateSINR_UL(model);
     }
+
+    // --- 5. Simulation Runners & Visualization ---
 
     function runBaselineSimulation() {
         if (!hubMarker || tailMarkers.length < 2) return alert("Define a hub and at least two tail locations on the map.");
 
         const model = buildNetworkModel();
-        calculateSINR(model);
-        const initialStates = model.links.map(l => ({ tx: l.txPower, sinr: l.sinr }));
+        calculateSINR_DL(model);
+        calculateSINR_UL(model);
 
-        executeMinMax(model, 100, 0.2);
+        const initialStates = model.links.map(l => ({
+            txDL: l.txPowerDL, sinrDL: l.sinrDL,
+            txUL: l.txPowerUL, sinrUL: l.sinrUL
+        }));
 
-        const tbody = document.querySelector("#resultsTable tbody");
-        tbody.innerHTML = "";
+        executeMinMaxBoth(model, 100, 0.2);
+
+        const dlTbody = document.querySelector("#dlResultsTable tbody");
+        const ulTbody = document.querySelector("#ulResultsTable tbody");
+        dlTbody.innerHTML = "";
+        ulTbody.innerHTML = "";
         
         model.links.forEach((link, idx) => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>Link ${idx + 1}</td>
+            const dlDelta = link.sinrDL - link.target;
+            const trDL = document.createElement("tr");
+            trDL.innerHTML = `
+                <td><b>Link ${idx + 1}</b></td>
                 <td>${link.dist.toFixed(2)}</td>
                 <td>${link.relAngle.toFixed(1)}°</td>
-                <td>${initialStates[idx].tx.toFixed(1)}</td>
-                <td>${initialStates[idx].sinr.toFixed(1)}</td>
-                <td><b>${link.txPower.toFixed(1)}</b></td>
-                <td><b>${link.sinr.toFixed(1)}</b></td>
-                <td style="color: ${(link.sinr - link.target) < -0.05 ? 'red' : 'green'}; font-weight: bold;">${(link.sinr - link.target).toFixed(2)}</td>
+                <td>${initialStates[idx].txDL.toFixed(1)}</td>
+                <td>${initialStates[idx].sinrDL.toFixed(1)}</td>
+                <td><b>${link.txPowerDL.toFixed(1)}</b></td>
+                <td><b>${link.sinrDL.toFixed(1)}</b></td>
+                <td style="color: ${dlDelta < -0.05 ? 'red' : 'green'}; font-weight: bold;">${dlDelta.toFixed(2)}</td>
             `;
-            tbody.appendChild(tr);
+            dlTbody.appendChild(trDL);
+
+            const ulDelta = link.sinrUL - link.target;
+            const trUL = document.createElement("tr");
+            trUL.innerHTML = `
+                <td><b>Link ${idx + 1}</b></td>
+                <td>${link.dist.toFixed(2)}</td>
+                <td>${link.relAngle.toFixed(1)}°</td>
+                <td>${initialStates[idx].txUL.toFixed(1)}</td>
+                <td>${initialStates[idx].sinrUL.toFixed(1)}</td>
+                <td><b>${link.txPowerUL.toFixed(1)}</b></td>
+                <td><b>${link.sinrUL.toFixed(1)}</b></td>
+                <td style="color: ${ulDelta < -0.05 ? 'red' : 'green'}; font-weight: bold;">${ulDelta.toFixed(2)}</td>
+            `;
+            ulTbody.appendChild(trUL);
         });
 
         document.getElementById('targetSnrLabel').innerText = `Target SINR for selected modulation: ${model.links[0].target.toFixed(2)} dB | Antenna Class: ${model.antClass}`;
@@ -565,21 +663,25 @@
         const maxFade = parseFloat(document.getElementById('mcFade').value);
         const numLinks = tailMarkers.length;
         
-        let sinrResults = Array.from({length: numLinks}, () => []);
+        let sinrResultsDL = Array.from({length: numLinks}, () => []);
+        let sinrResultsUL = Array.from({length: numLinks}, () => []);
 
         for (let i = 0; i < iters; i++) {
             const fadedLink = Math.floor(Math.random() * numLinks);
             const fadeDepth = Math.random() * maxFade;
             
             const model = buildNetworkModel(fadedLink, fadeDepth);
-            executeMinMax(model, 100, 0.2);
+            executeMinMaxBoth(model, 100, 0.2);
             
-            model.links.forEach((link, idx) => sinrResults[idx].push(link.sinr));
+            model.links.forEach((link, idx) => {
+                sinrResultsDL[idx].push(link.sinrDL);
+                sinrResultsUL[idx].push(link.sinrUL);
+            });
         }
-        renderHistograms(sinrResults);
+        renderHistograms(sinrResultsDL, sinrResultsUL);
     }
 
-    function renderHistograms(sinrResults) {
+    function renderHistograms(sinrResultsDL, sinrResultsUL) {
         document.getElementById('mcArea').style.display = 'block';
         const container = document.getElementById('chartsContainer');
         container.innerHTML = "";
@@ -587,50 +689,75 @@
         charts.forEach(c => c.destroy());
         charts = [];
 
-        sinrResults.forEach((data, idx) => {
+        const numLinks = sinrResultsDL.length;
+
+        for (let idx = 0; idx < numLinks; idx++) {
+            const dataDL = sinrResultsDL[idx];
+            const dataUL = sinrResultsUL[idx];
+
             const canvas = document.createElement('canvas');
             container.appendChild(canvas);
 
-            const min = Math.floor(Math.min(...data));
-            const max = Math.ceil(Math.max(...data));
+            const combined = dataDL.concat(dataUL);
+            const min = Math.floor(Math.min(...combined));
+            const max = Math.ceil(Math.max(...combined));
             const binCount = 20;
             const step = Math.max(0.1, (max - min) / binCount);
             
-            let bins = Array(binCount).fill(0);
+            let binsDL = Array(binCount).fill(0);
+            let binsUL = Array(binCount).fill(0);
             let labels = Array(binCount).fill('');
             
-            for(let i=0; i<binCount; i++) labels[i] = (min + i*step).toFixed(1);
+            for (let i = 0; i < binCount; i++) {
+                labels[i] = (min + i * step).toFixed(1);
+            }
 
-            data.forEach(val => {
+            dataDL.forEach(val => {
                 let binIdx = Math.floor((val - min) / step);
-                if(binIdx >= binCount) binIdx = binCount - 1;
-                bins[binIdx]++;
+                if (binIdx >= binCount) binIdx = binCount - 1;
+                if (binIdx < 0) binIdx = 0;
+                binsDL[binIdx]++;
+            });
+
+            dataUL.forEach(val => {
+                let binIdx = Math.floor((val - min) / step);
+                if (binIdx >= binCount) binIdx = binCount - 1;
+                if (binIdx < 0) binIdx = 0;
+                binsUL[binIdx]++;
             });
 
             charts.push(new Chart(canvas.getContext('2d'), {
                 type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: `Link ${idx + 1} Converged SINR (dB)`,
-                        data: bins,
-                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
+                    datasets: [
+                        {
+                            label: `Link ${idx + 1} Downlink (Hub → Tail) SINR (dB)`,
+                            data: binsDL,
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: `Link ${idx + 1} Uplink (Tail → Hub) SINR (dB)`,
+                            data: binsUL,
+                            backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            borderWidth: 1
+                        }
+                    ]
                 },
                 options: { 
                     maintainAspectRatio: false, 
                     scales: { 
-                        y: { beginAtZero: true, title: { display: true, text: 'Occurrences' } }, 
+                        y: { beginAtZero: true, title: { display: true, text: 'Occurrences (Iterations)' } }, 
                         x: { title: { display: true, text: 'Converged SINR (dB)' } } 
                     } 
                 }
             }));
-        });
+        }
     }
 
-    // Initialize UI and RPE plot on load
     window.onload = function() {
         onFreqChange();
     };
